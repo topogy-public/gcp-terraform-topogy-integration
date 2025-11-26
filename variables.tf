@@ -7,11 +7,6 @@ variable "gcp_billing_account_id" {
   description = "GCP Billing Account ID (required if create_billing_project is true)."
   type        = string
   default     = null
-
-  validation {
-    condition     = var.create_billing_project ? var.gcp_billing_account_id != null : true
-    error_message = "gcp_billing_account_id must be provided when create_billing_project=true."
-  }
 }
 
 variable "create_billing_project" {
@@ -71,11 +66,6 @@ variable "bigquery_project_id" {
   description = "The GCP Project ID where BigQuery operations occur (jobs role creation, billing dataset if created). Required if create_billing_project=false (to grant access to existing dataset). If create_billing_project=true and not provided, a new project ID will be generated."
   type        = string
   default     = null
-
-  validation {
-    condition     = !var.create_billing_project ? var.bigquery_project_id != null : true
-    error_message = "bigquery_project_id must be provided when create_billing_project=false (to grant access to existing billing dataset)."
-  }
 }
 
 variable "readonly_role_id" {
@@ -94,6 +84,12 @@ variable "project_ids" {
   description = "Optional list of project IDs where APIs should be enabled. If not provided, will attempt to auto-detect all accessible projects. Use this if the auto-detection isn't working."
   type        = list(string)
   default     = null
+}
+
+variable "enable_api_management" {
+  description = "Whether to enable and manage API endpoints. Set to false to disable API management."
+  type        = bool
+  default     = true
 }
 
 variable "bigquery_jobs_role_permissions" {
@@ -131,4 +127,10 @@ variable "readonly_role_permissions" {
     "resourcemanager.projects.getIamPolicy",
     "resourcemanager.projects.list",
   ]
+}
+
+variable "enable_billing_dataset_permissions" {
+  description = "Whether to grant BigQuery Data Viewer permissions to the Topogy service account for the billing dataset. Set to false if the dataset doesn't exist or you don't have permission to grant access."
+  type        = bool
+  default     = true
 }

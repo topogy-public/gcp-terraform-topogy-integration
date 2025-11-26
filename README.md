@@ -57,6 +57,22 @@ module "topogy_integration" {
 }
 ```
 
+### Disabling Billing Dataset Permissions
+
+If the billing dataset doesn't exist or you don't have permission to grant access to it, you can disable the dataset permissions:
+
+```hcl
+module "topogy_integration" {
+  source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+  gcp_org_id                   = "YOUR_ORG_ID"
+  topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+
+  # Disable dataset permissions if you don't have access
+  enable_billing_dataset_permissions = false
+}
+```
+
 ## Required Information
 
 - **GCP Organization ID**: Your GCP organization ID
@@ -92,7 +108,7 @@ No keys, tokens, or other credentials are needed.
 - **IAM bindings**:
   - Organization-level: `TopogyReadOnlyRole`, `roles/recommender.viewer`
   - Project-level: `TopogyBigQueryJobsRole`
-  - Dataset-level: `roles/bigquery.dataViewer` for the billing dataset
+  - Dataset-level: `roles/bigquery.dataViewer` for the billing dataset (if `enable_billing_dataset_permissions = true`)
 
 ## Outputs
 
@@ -116,13 +132,14 @@ The service account running this Terraform script needs the following permission
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 0.13.0 |
 | <a name="requirement_google"></a> [google](#requirement\_google) | >= 5.0.0, < 7.0.0 |
+| <a name="requirement_random"></a> [random](#requirement\_random) | >= 3.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | >= 5.0.0, < 7.0.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | n/a |
+| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
 
 ## Modules
 
@@ -158,6 +175,8 @@ No modules.
 | <a name="input_create_billing_dataset"></a> [create\_billing\_dataset](#input\_create\_billing\_dataset) | Whether to create a BigQuery dataset for billing data. | `bool` | `false` | no |
 | <a name="input_create_billing_project"></a> [create\_billing\_project](#input\_create\_billing\_project) | Whether to create a new project for billing data. If false, bigquery\_project\_id must be provided. If true and bigquery\_project\_id is not provided, a new project ID will be generated. | `bool` | `false` | no |
 | <a name="input_create_readonly_role"></a> [create\_readonly\_role](#input\_create\_readonly\_role) | Whether to create the read-only custom role. Set to false if the role is already created by another module instance. | `bool` | `true` | no |
+| <a name="input_enable_api_management"></a> [enable\_api\_management](#input\_enable\_api\_management) | Whether to enable and manage API endpoints. Set to false to disable API management. | `bool` | `true` | no |
+| <a name="input_enable_billing_dataset_permissions"></a> [enable\_billing\_dataset\_permissions](#input\_enable\_billing\_dataset\_permissions) | Whether to grant BigQuery Data Viewer permissions to the Topogy service account for the billing dataset. Set to false if the dataset doesn't exist or you don't have permission to grant access. | `bool` | `true` | no |
 | <a name="input_gcp_billing_account_id"></a> [gcp\_billing\_account\_id](#input\_gcp\_billing\_account\_id) | GCP Billing Account ID (required if create\_billing\_project is true). | `string` | `null` | no |
 | <a name="input_gcp_billing_data_dataset_description"></a> [gcp\_billing\_data\_dataset\_description](#input\_gcp\_billing\_data\_dataset\_description) | Dataset description for the billing data. | `string` | `"All billing data (required by Topogy)"` | no |
 | <a name="input_gcp_billing_data_dataset_id"></a> [gcp\_billing\_data\_dataset\_id](#input\_gcp\_billing\_data\_dataset\_id) | Dataset identifier where the billing data will be stored. | `string` | `"all_billing_data"` | no |

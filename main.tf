@@ -6,9 +6,9 @@ data "google_projects" "all_projects" {
   filter = "lifecycleState:ACTIVE"
 }
 
-// Random ID for billing project suffix (only used if creating a new project)
+// Random ID for billing project suffix (only used if creating a new project and bigquery_project_id is not provided)
 resource "random_id" "billing_project_suffix" {
-  count       = var.create_billing_project ? 1 : 0
+  count       = var.create_billing_project && var.bigquery_project_id == null ? 1 : 0
   byte_length = 4
   prefix      = ""
 }
@@ -76,12 +76,19 @@ resource "google_project" "billing_data_project" {
   project_id      = local.billing_project_id
   org_id          = var.gcp_org_id
   billing_account = var.gcp_billing_account_id
+
+  lifecycle {
+    precondition {
+      condition     = var.gcp_billing_account_id != null
+      error_message = "gcp_billing_account_id must be provided when create_billing_project=true."
+    }
+  }
 }
 
 // Enable billing-related APIs in billing project
 // These APIs are needed for billing export to work, whether creating or using existing dataset
 resource "google_project_service" "billing_apis" {
-  for_each = local.billing_project_id != null ? toset(local.billing_apis) : toset([])
+  for_each = var.enable_api_management && local.billing_project_id != null ? toset(local.billing_apis) : toset([])
 
   project = local.billing_project_id
   service = each.value
@@ -106,7 +113,7 @@ resource "google_bigquery_dataset" "billing_dataset" {
 
 // Enable required APIs for service account functionality in all projects
 resource "google_project_service" "required_apis" {
-  for_each = local.project_service_combinations
+  for_each = var.enable_api_management ? local.project_service_combinations : {}
 
   project = each.value.project_id
   service = each.value.service
@@ -124,6 +131,13 @@ resource "google_project_iam_custom_role" "bigquery_jobs_role" {
   description = "Custom role for BigQuery job operations (create, get, list)"
   permissions = var.bigquery_jobs_role_permissions
 
+  lifecycle {
+    precondition {
+      condition     = !var.create_billing_project ? var.bigquery_project_id != null : true
+      error_message = "bigquery_project_id must be provided when create_billing_project=false (to grant access to existing billing dataset)."
+    }
+  }
+
   depends_on = [google_project_service.required_apis]
 }
 
@@ -132,6 +146,13 @@ resource "google_project_iam_member" "bigquery_jobs_role" {
   project = local.bigquery_project_id
   role    = local.bigquery_jobs_role_name
   member  = "serviceAccount:${var.topogy_service_account_email}"
+
+  lifecycle {
+    precondition {
+      condition     = !var.create_billing_project ? var.bigquery_project_id != null : true
+      error_message = "bigquery_project_id must be provided when create_billing_project=false (to grant access to existing billing dataset)."
+    }
+  }
 
   depends_on = [
     google_project_iam_custom_role.bigquery_jobs_role,
@@ -173,10 +194,19 @@ resource "google_organization_iam_member" "recommender_viewer" {
 // Grant BigQuery Data Viewer role to service account for the billing dataset
 // Grant access to the billing dataset (either created or existing)
 resource "google_bigquery_dataset_access" "billing_data_viewer" {
+  count = var.enable_billing_dataset_permissions ? 1 : 0
+
   dataset_id    = local.billing_dataset_id
   project       = local.bigquery_project_id
   role          = "roles/bigquery.dataViewer"
   user_by_email = var.topogy_service_account_email
+
+  lifecycle {
+    precondition {
+      condition     = !var.create_billing_project ? var.bigquery_project_id != null : true
+      error_message = "bigquery_project_id must be provided when create_billing_project=false (to grant access to existing billing dataset)."
+    }
+  }
 
   depends_on = [google_bigquery_dataset.billing_dataset]
 }
