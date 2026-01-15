@@ -92,6 +92,12 @@ variable "enable_api_management" {
   default     = true
 }
 
+variable "api_exclusions" {
+  description = "Map of project IDs to lists of APIs to exclude from being enabled in those projects. Useful for excluding APIs that are not needed or cause errors in specific projects. Example: { \"my-project-id\" = [\"compute.googleapis.com\"] }"
+  type        = map(list(string))
+  default     = {}
+}
+
 variable "bigquery_jobs_role_permissions" {
   description = "List of permissions for the BigQuery jobs custom role."
   type        = list(string)

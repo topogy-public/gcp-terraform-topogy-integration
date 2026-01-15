@@ -52,13 +52,31 @@ locals {
       number     = null
     }
   ] : (length(data.google_projects.all_projects) > 0 ? data.google_projects.all_projects[0].projects : [])
+  // Default API exclusions: exclude compute.googleapis.com from billing project
+  // Merge user-provided exclusions with defaults, combining lists for projects that appear in both
+  api_exclusions = {
+    for project_id in distinct(concat(
+      local.billing_project_id != null ? [local.billing_project_id] : [],
+      keys(var.api_exclusions)
+      )) : project_id => distinct(concat(
+      local.billing_project_id != null && project_id == local.billing_project_id ? ["compute.googleapis.com"] : [],
+      lookup(var.api_exclusions, project_id, [])
+    ))
+  }
+  // Determine which APIs to enable for each project (excluding APIs in api_exclusions)
+  apis_per_project = {
+    for project in local.org_projects : project.project_id => [
+      for api in local.required_apis : api
+      if !contains(lookup(local.api_exclusions, project.project_id, []), api)
+    ]
+  }
   // Create a map of all project-service combinations
   project_service_combinations = {
     for combo in flatten([
-      for project in local.org_projects : [
-        for api in local.required_apis : {
-          key        = "${project.project_id}:${api}"
-          project_id = project.project_id
+      for project_id, apis in local.apis_per_project : [
+        for api in apis : {
+          key        = "${project_id}:${api}"
+          project_id = project_id
           service    = api
         }
       ]
