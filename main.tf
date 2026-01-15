@@ -20,6 +20,7 @@ locals {
     "cloudasset.googleapis.com",
     "cloudbilling.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "compute.googleapis.com",
     "monitoring.googleapis.com",
     "recommender.googleapis.com",
   ]
