@@ -16,6 +16,7 @@ This module:
      - `TopogyBigQueryJobsRole` - Project-level BigQuery job operations
    - Grants the built-in `Recommender Viewer` role at the organization level
    - Grants BigQuery Data Viewer access to the billing dataset
+   - Grants BigQuery Data Viewer access to the CUD (Committed Use Discounts) dataset (optional)
 
 ## Usage
 
@@ -73,12 +74,39 @@ module "topogy_integration" {
 }
 ```
 
+### Configuring CUD (Committed Use Discounts) Dataset Access
+
+To grant Topogy access to your CUD data for spend-based CUD analysis, you need to:
+
+1. **Manually configure the CUD export in GCP** (this cannot be done via Terraform):
+   - Navigate to the GCP Console
+   - Set up the CUD export to BigQuery
+   - When prompted for "Linked dataset name", enter the name you want to use (e.g., `cud_data`)
+   - **Important**: The dataset must NOT exist before configuring the export. GCP will create it automatically when you configure the export.
+
+2. **Configure Terraform** to grant access to the dataset:
+   ```hcl
+   module "topogy_integration" {
+     source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+     gcp_org_id                   = "YOUR_ORG_ID"
+     topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+     bigquery_project_id          = "your-bigquery-project"
+
+     # Grant access to CUD dataset (use the same name you entered in GCP)
+     gcp_cud_data_dataset_id = "cud_data"  # Must match the "Linked dataset name" from GCP export setup
+   }
+   ```
+
+**Note**: The CUD export configuration is manual and must be done in the GCP Console. The dataset will be created automatically by GCP when you configure the export. After the export is configured and the dataset exists, Terraform can grant the Topogy service account access to it.
+
 ## Required Information
 
 - **GCP Organization ID**: Your GCP organization ID
 - **Topogy Service Account Email**: Provided by Topogy (e.g., `topogy-fintu-xxxxx@prod-client-sa-xxxxx.iam.gserviceaccount.com`)
 - **Billing Account ID**: Required only if `create_billing_project = true`
 - **BigQuery Project ID**: The project where BigQuery operations occur (jobs role, billing dataset if created). Required if `create_billing_dataset = true` and `create_billing_project = false`. If `create_billing_project = true` and not provided, a new project ID will be generated.
+- **CUD Dataset ID** (optional): The name of the CUD dataset. This must match the "Linked dataset name" entered when configuring the CUD export in GCP. **Important**: The CUD export must be configured manually in GCP, and the dataset cannot exist before configuring the export as GCP will create it automatically.
 
 No keys, tokens, or other credentials are needed.
 
@@ -109,11 +137,13 @@ No keys, tokens, or other credentials are needed.
   - Organization-level: `TopogyReadOnlyRole`, `roles/recommender.viewer`
   - Project-level: `TopogyBigQueryJobsRole`
   - Dataset-level: `roles/bigquery.dataViewer` for the billing dataset (if `enable_billing_dataset_permissions = true`)
+  - Dataset-level: `roles/bigquery.dataViewer` for the CUD dataset (if `enable_cud_dataset_permissions = true`)
 
 ## Outputs
 
 - `billing_project_id`: ID of the billing project
 - `billing_dataset_id`: ID of the billing dataset
+- `cud_dataset_id`: ID of the CUD (Committed Use Discounts) dataset. This should be used when configuring the GCP integration in Topogy.
 
 ## Pre-requirements
 
