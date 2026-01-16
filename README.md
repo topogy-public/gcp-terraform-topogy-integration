@@ -28,7 +28,7 @@ module "topogy_integration" {
 
   gcp_org_id                   = "YOUR_ORG_ID"
   gcp_billing_account_id       = "YOUR_BILLING_ACCOUNT_ID"
-  topogy_service_account_email = "topogy-service-account@project.iam.gserviceaccount.com"
+  topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL" # This can be found in the GCP integration page in Topogy
 
   # Create billing dataset
   create_billing_project = true
@@ -50,14 +50,8 @@ module "topogy_integration" {
   create_billing_dataset       = false
   bigquery_project_id          = "existing-billing-project"  # Used for both BigQuery operations and billing dataset
   gcp_billing_data_dataset_id  = "existing_billing_dataset"
-
-  # If you want terraform to create billing project and dataset
-  create_billing_project = true
-  create_billing_dataset = true
-  billing_account_id     = ""
 }
 ```
-
 ### Disabling Billing Dataset Permissions
 
 If the billing dataset doesn't exist or you don't have permission to grant access to it, you can disable the dataset permissions:
@@ -69,8 +63,11 @@ module "topogy_integration" {
   gcp_org_id                   = "YOUR_ORG_ID"
   topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
 
-  # Disable dataset permissions if you don't have access
+  # Disable billing dataset permissions if you don't have access
   enable_billing_dataset_permissions = false
+
+  # Disable cud dataset permissions if you don't have access or it doesn't exist
+  enable_cud_dataset_permissions = false
 }
 ```
 
