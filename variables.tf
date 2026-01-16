@@ -81,7 +81,7 @@ variable "create_readonly_role" {
 }
 
 variable "project_ids" {
-  description = "Optional list of project IDs where APIs should be enabled. If not provided, will attempt to auto-detect all accessible projects. Use this if the auto-detection isn't working."
+  description = "Optional list of project IDs where APIs should be enabled. If not provided, will attempt to auto-detect all accessible projects. Use this if the auto-detection isn't working or to restrict which projects this module manages."
   type        = list(string)
   default     = null
 }

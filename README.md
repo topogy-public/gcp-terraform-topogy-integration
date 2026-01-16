@@ -97,6 +97,41 @@ To grant Topogy access to your CUD data for spend-based CUD analysis, you need t
 
 **Note**: The CUD export configuration is manual and must be done in the GCP Console. The dataset will be created automatically by GCP when you configure the export. After the export is configured and the dataset exists, Terraform can grant the Topogy service account access to it.
 
+### Configuring Project API Management
+
+By default, the module will attempt to auto-detect all accessible projects and enable required APIs in them. You can customize this behavior:
+
+**Specify specific projects:**
+```hcl
+module "topogy_integration" {
+  source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+  gcp_org_id                   = "YOUR_ORG_ID"
+  topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+
+  # Only manage APIs in these specific projects
+  project_ids = ["project-1", "project-2", "project-3"]
+}
+```
+
+**Exclude specific APIs from projects:**
+```hcl
+module "topogy_integration" {
+  source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+  gcp_org_id                   = "YOUR_ORG_ID"
+  topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+
+  # Exclude specific APIs from specific projects
+  api_exclusions = {
+    "billing-project" = ["compute.googleapis.com"]  # Already excluded by default, but shown for example
+    "another-project" = ["monitoring.googleapis.com"]
+  }
+}
+```
+
+**Note**: The Compute Engine API is automatically excluded from the billing project (when `billing_project_id` is set), even if you don't specify it in `api_exclusions`.
+
 ## Required Information
 
 - **GCP Organization ID**: Your GCP organization ID
@@ -109,11 +144,13 @@ No keys, tokens, or other credentials are needed.
 
 ## What Gets Created
 
-### If `create_billing_dataset = true`:
+### If `create_billing_project = true`:
 - **Billing Project**:
   - New GCP project for billing data
   - APIs enabled: BigQuery, BigQuery Data Transfer, Cloud Billing
+  - **Note**: The Compute Engine API is automatically excluded from the billing project
 
+### If `create_billing_dataset = true`:
 - **Billing Dataset**:
   - BigQuery dataset for storing billing export data
   - Automatically granted to Topogy service account
@@ -123,6 +160,7 @@ No keys, tokens, or other credentials are needed.
   - Cloud Asset API
   - Cloud Billing API
   - Cloud Resource Manager API
+  - Compute Engine API (automatically excluded from billing project)
   - Monitoring API
   - Recommender API
 
