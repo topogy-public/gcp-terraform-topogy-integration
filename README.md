@@ -73,15 +73,33 @@ module "topogy_integration" {
 
 ### Configuring CUD (Committed Use Discounts) Dataset Access
 
-To grant Topogy access to your CUD data for spend-based CUD analysis, you need to:
+To grant Topogy access to your CUD data for spend-based CUD analysis, you need to follow this workflow in order:
 
-1. **Manually configure the CUD export in GCP** (this cannot be done via Terraform):
-   - Navigate to the GCP Console
-   - Set up the CUD export to BigQuery
+**Important Workflow Note**: Unlike the billing dataset (which Terraform can create), the CUD dataset is created automatically by GCP when you configure the CUD export. This means you need to run Terraform in multiple steps:
+
+1. **First, create the billing project and dataset** (if not already created):
+   ```hcl
+   module "topogy_integration" {
+     source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+     gcp_org_id                   = "YOUR_ORG_ID"
+     gcp_billing_account_id       = "YOUR_BILLING_ACCOUNT_ID"
+     topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+
+     create_billing_project = true
+     create_billing_dataset = true
+     # Don't enable CUD dataset permissions yet - the dataset doesn't exist
+     enable_cud_dataset_permissions = false
+   }
+   ```
+   Run `terraform apply` to create the billing project and dataset.
+
+2. **Manually configure the CUD export in GCP** (this cannot be done via Terraform):
+   - Follow the instructions in the [Topogy Integration Guide](https://docs.google.com/document/d/1U9wysY8wVnQMd4If3QJ1wzUZaSlAFZhRCjxnAYTr1eI/edit?tab=t.mkwww84swex5)
    - When prompted for "Linked dataset name", enter the name you want to use (e.g., `cud_data`)
    - **Important**: The dataset must NOT exist before configuring the export. GCP will create it automatically when you configure the export.
 
-2. **Configure Terraform** to grant access to the dataset:
+3. **After the CUD export is configured and the dataset exists, update Terraform** to grant access:
    ```hcl
    module "topogy_integration" {
      source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
@@ -92,10 +110,12 @@ To grant Topogy access to your CUD data for spend-based CUD analysis, you need t
 
      # Grant access to CUD dataset (use the same name you entered in GCP)
      gcp_cud_data_dataset_id = "cud_data"  # Must match the "Linked dataset name" from GCP export setup
+     enable_cud_dataset_permissions = true  # Now enable this since the dataset exists
    }
    ```
+   Run `terraform apply` again to grant the Topogy service account access to the CUD dataset.
 
-**Note**: The CUD export configuration is manual and must be done in the GCP Console. The dataset will be created automatically by GCP when you configure the export. After the export is configured and the dataset exists, Terraform can grant the Topogy service account access to it.
+**Summary**: The CUD export configuration is manual and must be done in the GCP Console using the [Topogy Integration Guide](https://docs.google.com/document/d/1U9wysY8wVnQMd4If3QJ1wzUZaSlAFZhRCjxnAYTr1eI/edit?tab=t.mkwww84swex5). The dataset will be created automatically by GCP when you configure the export. You must run Terraform twice: first to create the billing infrastructure, then again after configuring the export to grant access to the CUD dataset.
 
 ### Configuring Project API Management
 
