@@ -20,6 +20,7 @@ locals {
     "cloudasset.googleapis.com",
     "cloudbilling.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "compute.googleapis.com",
     "monitoring.googleapis.com",
     "recommender.googleapis.com",
   ]
@@ -39,6 +40,8 @@ locals {
   billing_project_id = local.bigquery_project_id
   // Determine billing dataset ID
   billing_dataset_id = var.gcp_billing_data_dataset_id
+  // Determine CUD dataset ID
+  cud_dataset_id = var.gcp_cud_data_dataset_id
   // Use provided project IDs or auto-detect from data source
   // If project_ids is provided, create project objects from the list
   // Otherwise, use the data source results
@@ -49,13 +52,31 @@ locals {
       number     = null
     }
   ] : (length(data.google_projects.all_projects) > 0 ? data.google_projects.all_projects[0].projects : [])
+  // Default API exclusions: exclude compute.googleapis.com from billing project
+  // Merge user-provided exclusions with defaults, combining lists for projects that appear in both
+  api_exclusions = {
+    for project_id in distinct(concat(
+      local.billing_project_id != null ? [local.billing_project_id] : [],
+      keys(var.api_exclusions)
+      )) : project_id => distinct(concat(
+      local.billing_project_id != null && project_id == local.billing_project_id ? ["compute.googleapis.com"] : [],
+      lookup(var.api_exclusions, project_id, [])
+    ))
+  }
+  // Determine which APIs to enable for each project (excluding APIs in api_exclusions)
+  apis_per_project = {
+    for project in local.org_projects : project.project_id => [
+      for api in local.required_apis : api
+      if !contains(lookup(local.api_exclusions, project.project_id, []), api)
+    ]
+  }
   // Create a map of all project-service combinations
   project_service_combinations = {
     for combo in flatten([
-      for project in local.org_projects : [
-        for api in local.required_apis : {
-          key        = "${project.project_id}:${api}"
-          project_id = project.project_id
+      for project_id, apis in local.apis_per_project : [
+        for api in apis : {
+          key        = "${project_id}:${api}"
+          project_id = project_id
           service    = api
         }
       ]
@@ -209,4 +230,18 @@ resource "google_bigquery_dataset_access" "billing_data_viewer" {
   }
 
   depends_on = [google_bigquery_dataset.billing_dataset]
+}
+
+// Grant BigQuery Data Viewer role to service account for the CUD dataset
+// Grant access to the CUD dataset (must be created by GCP when configuring CUD export)
+// Note: The CUD export must be configured manually in GCP, and the dataset cannot exist
+// before configuring the export as GCP will create it automatically.
+// The dataset must exist before this resource can be applied successfully.
+resource "google_bigquery_dataset_access" "cud_data_viewer" {
+  count = var.enable_cud_dataset_permissions ? 1 : 0
+
+  dataset_id    = local.cud_dataset_id
+  project       = local.bigquery_project_id
+  role          = "roles/bigquery.dataViewer"
+  user_by_email = var.topogy_service_account_email
 }

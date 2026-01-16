@@ -81,7 +81,7 @@ variable "create_readonly_role" {
 }
 
 variable "project_ids" {
-  description = "Optional list of project IDs where APIs should be enabled. If not provided, will attempt to auto-detect all accessible projects. Use this if the auto-detection isn't working."
+  description = "Optional list of project IDs where APIs should be enabled. If not provided, will attempt to auto-detect all accessible projects. Use this if the auto-detection isn't working or to restrict which projects this module manages."
   type        = list(string)
   default     = null
 }
@@ -90,6 +90,12 @@ variable "enable_api_management" {
   description = "Whether to enable and manage API endpoints. Set to false to disable API management."
   type        = bool
   default     = true
+}
+
+variable "api_exclusions" {
+  description = "Map of project IDs to lists of APIs to exclude from being enabled in those projects. Useful for excluding APIs that are not needed or cause errors in specific projects. Example: { \"my-project-id\" = [\"compute.googleapis.com\"] }"
+  type        = map(list(string))
+  default     = {}
 }
 
 variable "bigquery_jobs_role_permissions" {
@@ -131,6 +137,18 @@ variable "readonly_role_permissions" {
 
 variable "enable_billing_dataset_permissions" {
   description = "Whether to grant BigQuery Data Viewer permissions to the Topogy service account for the billing dataset. Set to false if the dataset doesn't exist or you don't have permission to grant access."
+  type        = bool
+  default     = true
+}
+
+variable "gcp_cud_data_dataset_id" {
+  description = "Dataset identifier for the CUD (Committed Use Discounts) data. This should match the 'Linked dataset name' entered when configuring the CUD export in GCP. Note: The CUD export must be configured manually in GCP, and the dataset cannot exist before configuring the export as GCP will create it automatically."
+  type        = string
+  default     = "cud_data"
+}
+
+variable "enable_cud_dataset_permissions" {
+  description = "Whether to grant BigQuery Data Viewer permissions to the Topogy service account for the CUD dataset. Set to false if the dataset doesn't exist or you don't have permission to grant access. Note: The CUD export must be configured manually in GCP before this permission can be granted."
   type        = bool
   default     = true
 }

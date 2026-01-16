@@ -16,6 +16,7 @@ This module:
      - `TopogyBigQueryJobsRole` - Project-level BigQuery job operations
    - Grants the built-in `Recommender Viewer` role at the organization level
    - Grants BigQuery Data Viewer access to the billing dataset
+   - Grants BigQuery Data Viewer access to the CUD (Committed Use Discounts) dataset (optional)
 
 ## Usage
 
@@ -27,7 +28,7 @@ module "topogy_integration" {
 
   gcp_org_id                   = "YOUR_ORG_ID"
   gcp_billing_account_id       = "YOUR_BILLING_ACCOUNT_ID"
-  topogy_service_account_email = "topogy-service-account@project.iam.gserviceaccount.com"
+  topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL" # This can be found in the GCP integration page in Topogy
 
   # Create billing dataset
   create_billing_project = true
@@ -49,14 +50,8 @@ module "topogy_integration" {
   create_billing_dataset       = false
   bigquery_project_id          = "existing-billing-project"  # Used for both BigQuery operations and billing dataset
   gcp_billing_data_dataset_id  = "existing_billing_dataset"
-
-  # If you want terraform to create billing project and dataset
-  create_billing_project = true
-  create_billing_dataset = true
-  billing_account_id     = ""
 }
 ```
-
 ### Disabling Billing Dataset Permissions
 
 If the billing dataset doesn't exist or you don't have permission to grant access to it, you can disable the dataset permissions:
@@ -68,10 +63,94 @@ module "topogy_integration" {
   gcp_org_id                   = "YOUR_ORG_ID"
   topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
 
-  # Disable dataset permissions if you don't have access
+  # Disable billing dataset permissions if you don't have access
   enable_billing_dataset_permissions = false
+
+  # Disable cud dataset permissions if you don't have access or it doesn't exist
+  enable_cud_dataset_permissions = false
 }
 ```
+
+### Configuring CUD (Committed Use Discounts) Dataset Access
+
+To grant Topogy access to your CUD data for spend-based CUD analysis, you need to follow this workflow in order:
+
+**Important Workflow Note**: Unlike the billing dataset (which Terraform can create), the CUD dataset is created automatically by GCP when you configure the CUD export. This means you need to run Terraform in multiple steps:
+
+1. **First, create the billing project and dataset** (if not already created):
+   ```hcl
+   module "topogy_integration" {
+     source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+     gcp_org_id                   = "YOUR_ORG_ID"
+     gcp_billing_account_id       = "YOUR_BILLING_ACCOUNT_ID"
+     topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+
+     create_billing_project = true
+     create_billing_dataset = true
+     # Don't enable CUD dataset permissions yet - the dataset doesn't exist
+     enable_cud_dataset_permissions = false
+   }
+   ```
+   Run `terraform apply` to create the billing project and dataset.
+
+2. **Manually configure the CUD export in GCP** (this cannot be done via Terraform):
+   - Follow the instructions in the [Topogy Integration Guide](https://docs.google.com/document/d/1U9wysY8wVnQMd4If3QJ1wzUZaSlAFZhRCjxnAYTr1eI/edit?tab=t.mkwww84swex5)
+   - When prompted for "Linked dataset name", enter the name you want to use (e.g., `cud_data`)
+   - **Important**: The dataset must NOT exist before configuring the export. GCP will create it automatically when you configure the export.
+
+3. **After the CUD export is configured and the dataset exists, update Terraform** to grant access:
+   ```hcl
+   module "topogy_integration" {
+     source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+     gcp_org_id                   = "YOUR_ORG_ID"
+     topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+     bigquery_project_id          = "your-bigquery-project"
+
+     # Grant access to CUD dataset (use the same name you entered in GCP)
+     gcp_cud_data_dataset_id = "cud_data"  # Must match the "Linked dataset name" from GCP export setup
+     enable_cud_dataset_permissions = true  # Now enable this since the dataset exists
+   }
+   ```
+   Run `terraform apply` again to grant the Topogy service account access to the CUD dataset.
+
+**Summary**: The CUD export configuration is manual and must be done in the GCP Console using the [Topogy Integration Guide](https://docs.google.com/document/d/1U9wysY8wVnQMd4If3QJ1wzUZaSlAFZhRCjxnAYTr1eI/edit?tab=t.mkwww84swex5). The dataset will be created automatically by GCP when you configure the export. You must run Terraform twice: first to create the billing infrastructure, then again after configuring the export to grant access to the CUD dataset.
+
+### Configuring Project API Management
+
+By default, the module will attempt to auto-detect all accessible projects and enable required APIs in them. You can customize this behavior:
+
+**Specify specific projects:**
+```hcl
+module "topogy_integration" {
+  source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+  gcp_org_id                   = "YOUR_ORG_ID"
+  topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+
+  # Only manage APIs in these specific projects
+  project_ids = ["project-1", "project-2", "project-3"]
+}
+```
+
+**Exclude specific APIs from projects:**
+```hcl
+module "topogy_integration" {
+  source = "git::https://github.com/topogy-public/gcp-terraform-topogy-integration.git?ref=main"
+
+  gcp_org_id                   = "YOUR_ORG_ID"
+  topogy_service_account_email = "TOPOGY_SERVICE_ACCOUNT_EMAIL"
+
+  # Exclude specific APIs from specific projects
+  api_exclusions = {
+    "billing-project" = ["compute.googleapis.com"]  # Already excluded by default, but shown for example
+    "another-project" = ["monitoring.googleapis.com"]
+  }
+}
+```
+
+**Note**: The Compute Engine API is automatically excluded from the billing project (when `billing_project_id` is set), even if you don't specify it in `api_exclusions`.
 
 ## Required Information
 
@@ -79,16 +158,19 @@ module "topogy_integration" {
 - **Topogy Service Account Email**: Provided by Topogy (e.g., `topogy-fintu-xxxxx@prod-client-sa-xxxxx.iam.gserviceaccount.com`)
 - **Billing Account ID**: Required only if `create_billing_project = true`
 - **BigQuery Project ID**: The project where BigQuery operations occur (jobs role, billing dataset if created). Required if `create_billing_dataset = true` and `create_billing_project = false`. If `create_billing_project = true` and not provided, a new project ID will be generated.
+- **CUD Dataset ID** (optional): The name of the CUD dataset. This must match the "Linked dataset name" entered when configuring the CUD export in GCP. **Important**: The CUD export must be configured manually in GCP, and the dataset cannot exist before configuring the export as GCP will create it automatically.
 
 No keys, tokens, or other credentials are needed.
 
 ## What Gets Created
 
-### If `create_billing_dataset = true`:
+### If `create_billing_project = true`:
 - **Billing Project**:
   - New GCP project for billing data
   - APIs enabled: BigQuery, BigQuery Data Transfer, Cloud Billing
+  - **Note**: The Compute Engine API is automatically excluded from the billing project
 
+### If `create_billing_dataset = true`:
 - **Billing Dataset**:
   - BigQuery dataset for storing billing export data
   - Automatically granted to Topogy service account
@@ -98,6 +180,7 @@ No keys, tokens, or other credentials are needed.
   - Cloud Asset API
   - Cloud Billing API
   - Cloud Resource Manager API
+  - Compute Engine API (automatically excluded from billing project)
   - Monitoring API
   - Recommender API
 
@@ -109,11 +192,13 @@ No keys, tokens, or other credentials are needed.
   - Organization-level: `TopogyReadOnlyRole`, `roles/recommender.viewer`
   - Project-level: `TopogyBigQueryJobsRole`
   - Dataset-level: `roles/bigquery.dataViewer` for the billing dataset (if `enable_billing_dataset_permissions = true`)
+  - Dataset-level: `roles/bigquery.dataViewer` for the CUD dataset (if `enable_cud_dataset_permissions = true`)
 
 ## Outputs
 
 - `billing_project_id`: ID of the billing project
 - `billing_dataset_id`: ID of the billing dataset
+- `cud_dataset_id`: ID of the CUD (Committed Use Discounts) dataset. This should be used when configuring the GCP integration in Topogy.
 
 ## Pre-requirements
 
@@ -125,6 +210,7 @@ The service account running this Terraform script needs the following permission
 - Billing Account Administrator
 - Project Creator
 
+<!-- NOTE: Content below this line is auto-generated by terraform-docs. Do not edit manually. -->
 <!-- BEGIN_TF_DOCS -->
 ## Requirements
 
@@ -138,8 +224,8 @@ The service account running this Terraform script needs the following permission
 
 | Name | Version |
 |------|---------|
-| <a name="provider_google"></a> [google](#provider\_google) | 6.50.0 |
-| <a name="provider_random"></a> [random](#provider\_random) | 3.7.2 |
+| <a name="provider_google"></a> [google](#provider\_google) | >= 5.0.0, < 7.0.0 |
+| <a name="provider_random"></a> [random](#provider\_random) | >= 3.0.0 |
 
 ## Modules
 
@@ -151,16 +237,17 @@ No modules.
 |------|------|
 | [google_bigquery_dataset.billing_dataset](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset) | resource |
 | [google_bigquery_dataset_access.billing_data_viewer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset_access) | resource |
-| [google_organization_iam_custom_role.readonly_role](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_organization_iam_custom_role) | resource |
-| [google_organization_iam_member.readonly_role](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_organization_iam#google_organization_iam_member) | resource |
-| [google_organization_iam_member.recommender_viewer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_organization_iam#google_organization_iam_member) | resource |
-| [google_project.billing_data_project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project) | resource |
-| [google_project_iam_custom_role.bigquery_jobs_role](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_iam_custom_role) | resource |
-| [google_project_iam_member.bigquery_jobs_role](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_iam#google_project_iam_member) | resource |
-| [google_project_service.billing_apis](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_service) | resource |
-| [google_project_service.required_apis](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project_service) | resource |
+| [google_bigquery_dataset_access.cud_data_viewer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/bigquery_dataset_access) | resource |
+| [google_organization_iam_custom_role.readonly_role](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/organization_iam_custom_role) | resource |
+| [google_organization_iam_member.readonly_role](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/organization_iam_member) | resource |
+| [google_organization_iam_member.recommender_viewer](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/organization_iam_member) | resource |
+| [google_project.billing_data_project](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project) | resource |
+| [google_project_iam_custom_role.bigquery_jobs_role](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_custom_role) | resource |
+| [google_project_iam_member.bigquery_jobs_role](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_iam_member) | resource |
+| [google_project_service.billing_apis](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_service) | resource |
+| [google_project_service.required_apis](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/project_service) | resource |
 | [random_id.billing_project_suffix](https://registry.terraform.io/providers/hashicorp/random/latest/docs/resources/id) | resource |
-| [google_projects.all_projects](https://registry.terraform.io/providers/hashicorp/google/latest/docs/resources/google_project) | data source |
+| [google_projects.all_projects](https://registry.terraform.io/providers/hashicorp/google/latest/docs/data-sources/projects) | data source |
 
 ## Inputs
 
@@ -177,9 +264,11 @@ No modules.
 | <a name="input_create_readonly_role"></a> [create\_readonly\_role](#input\_create\_readonly\_role) | Whether to create the read-only custom role. Set to false if the role is already created by another module instance. | `bool` | `true` | no |
 | <a name="input_enable_api_management"></a> [enable\_api\_management](#input\_enable\_api\_management) | Whether to enable and manage API endpoints. Set to false to disable API management. | `bool` | `true` | no |
 | <a name="input_enable_billing_dataset_permissions"></a> [enable\_billing\_dataset\_permissions](#input\_enable\_billing\_dataset\_permissions) | Whether to grant BigQuery Data Viewer permissions to the Topogy service account for the billing dataset. Set to false if the dataset doesn't exist or you don't have permission to grant access. | `bool` | `true` | no |
+| <a name="input_enable_cud_dataset_permissions"></a> [enable\_cud\_dataset\_permissions](#input\_enable\_cud\_dataset\_permissions) | Whether to grant BigQuery Data Viewer permissions to the Topogy service account for the CUD dataset. Set to false if the dataset doesn't exist or you don't have permission to grant access. Note: The CUD export must be configured manually in GCP before this permission can be granted. | `bool` | `true` | no |
 | <a name="input_gcp_billing_account_id"></a> [gcp\_billing\_account\_id](#input\_gcp\_billing\_account\_id) | GCP Billing Account ID (required if create\_billing\_project is true). | `string` | `null` | no |
 | <a name="input_gcp_billing_data_dataset_description"></a> [gcp\_billing\_data\_dataset\_description](#input\_gcp\_billing\_data\_dataset\_description) | Dataset description for the billing data. | `string` | `"All billing data (required by Topogy)"` | no |
 | <a name="input_gcp_billing_data_dataset_id"></a> [gcp\_billing\_data\_dataset\_id](#input\_gcp\_billing\_data\_dataset\_id) | Dataset identifier where the billing data will be stored. | `string` | `"all_billing_data"` | no |
+| <a name="input_gcp_cud_data_dataset_id"></a> [gcp\_cud\_data\_dataset\_id](#input\_gcp\_cud\_data\_dataset\_id) | Dataset identifier for the CUD (Committed Use Discounts) data. This should match the 'Linked dataset name' entered when configuring the CUD export in GCP. Note: The CUD export must be configured manually in GCP, and the dataset cannot exist before configuring the export as GCP will create it automatically. | `string` | `"cud_data"` | no |
 | <a name="input_gcp_org_id"></a> [gcp\_org\_id](#input\_gcp\_org\_id) | GCP Organization ID | `string` | n/a | yes |
 | <a name="input_project_ids"></a> [project\_ids](#input\_project\_ids) | Optional list of project IDs where APIs should be enabled. If not provided, will attempt to auto-detect all accessible projects. Use this if the auto-detection isn't working. | `list(string)` | `null` | no |
 | <a name="input_readonly_role_id"></a> [readonly\_role\_id](#input\_readonly\_role\_id) | The ID (name) of the custom read-only role. This will be used to create and reference the role at the organization level. | `string` | `"TopogyReadOnlyRole"` | no |
@@ -192,4 +281,5 @@ No modules.
 |------|-------------|
 | <a name="output_billing_dataset_id"></a> [billing\_dataset\_id](#output\_billing\_dataset\_id) | The ID of the BigQuery billing dataset. |
 | <a name="output_billing_project_id"></a> [billing\_project\_id](#output\_billing\_project\_id) | The ID of the project where the billing dataset is located (or would be located if created). |
+| <a name="output_cud_dataset_id"></a> [cud\_dataset\_id](#output\_cud\_dataset\_id) | The ID of the BigQuery CUD (Committed Use Discounts) dataset. This should be used when configuring the GCP integration in Topogy. |
 <!-- END_TF_DOCS -->

@@ -7,3 +7,8 @@ output "billing_dataset_id" {
   description = "The ID of the BigQuery billing dataset."
   value       = local.billing_dataset_id
 }
+
+output "cud_dataset_id" {
+  description = "The ID of the BigQuery CUD (Committed Use Discounts) dataset. This should be used when configuring the GCP integration in Topogy."
+  value       = local.cud_dataset_id
+}
