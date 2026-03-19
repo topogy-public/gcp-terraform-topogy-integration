@@ -144,7 +144,7 @@ variable "enable_billing_dataset_permissions" {
 variable "gcp_cud_data_dataset_id" {
   description = "Dataset identifier for the CUD (Committed Use Discounts) data. This should match the 'Linked dataset name' entered when configuring the CUD export in GCP. Note: The CUD export must be configured manually in GCP, and the dataset cannot exist before configuring the export as GCP will create it automatically."
   type        = string
-  default     = "cud_data"
+  default     = "cud_data_export"
 }
 
 variable "enable_cud_dataset_permissions" {
